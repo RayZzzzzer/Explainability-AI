@@ -4,14 +4,11 @@ A comprehensive multi-modal Explainable AI platform for audio deepfake detection
 
 ## 👥 Team Information
 
-**TD Group**: [Your TD Group Number]
+**TD Group**: DIA5
 
 **Team Members**:
-- [Student Name 1]
-- [Student Name 2]
-- [Student Name 3]
-- [Student Name 4]
-- [Student Name 5]
+- REDON Guillaume
+- RENOIR Théo
 
 ## 📋 Project Overview
 
@@ -81,7 +78,7 @@ cd unified-xai-platform
 ```bash
 # Windows
 python -m venv venv
-venv\Scripts\activate
+venv\Scripts\activate.ps1
 
 # Linux/Mac
 python3 -m venv venv
@@ -219,22 +216,22 @@ This project was developed with assistance from generative AI tools in accordanc
 
 ### How AI Was Used
 
-1. **Code Refactoring** (40% of development time)
+1. **Code Refactoring**
    - Restructuring original repositories into modular architecture
    - Converting Jupyter notebooks to production-ready Python modules
    - Implementing design patterns and best practices
 
-2. **Architecture Design** (20% of development time)
+2. **Architecture Design**
    - Planning the unified platform structure
    - Designing the compatibility checking system
    - Creating modular component interfaces
 
-3. **Documentation** (25% of development time)
+3. **Documentation**
    - Writing comprehensive README documentation
    - Creating technical report
    - Generating code comments and docstrings
 
-4. **Implementation** (15% of development time)
+4. **Implementation**
    - XAI method wrapper implementations
    - Streamlit UI components
    - Error handling and edge cases
@@ -311,19 +308,5 @@ This project integrates work from:
 
 Please respect the licenses of the original repositories.
 
-## 🙏 Acknowledgments
-
-- Original repository authors for their foundational work
-- Course instructors for project guidance
-- Open-source community for XAI libraries (LIME, SHAP)
-- Streamlit team for the excellent web framework
-
-## 📞 Contact
-
-For questions or issues, please contact:
-- [Your email or contact information]
-
----
-
-**Last Updated**: December 2025  
+**Last Updated**: January 2025  
 **Version**: 1.0.0

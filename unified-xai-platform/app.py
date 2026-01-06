@@ -58,90 +58,27 @@ def main():
     """Main application entry point"""
     
     # Sidebar navigation
-    st.sidebar.title("🔬 Unified XAI Platform")
+    st.sidebar.title("ESILV DIA - XAI PROJECT : Lung Cancer & Audio Deepfake Detection")
     st.sidebar.markdown("---")
     
     page = st.sidebar.radio(
         "Navigation",
-        ["🏠 Home", "📊 Classification & XAI", "🔍 XAI Comparison", "ℹ️ About"]
+        ["Classification & XAI", "XAI Comparison"]
     )
     
-    if page == "🏠 Home":
-        show_home_page()
-    elif page == "📊 Classification & XAI":
+    if page == "Classification & XAI":
         show_classification_page()
-    elif page == "🔍 XAI Comparison":
+    elif page == "XAI Comparison":
         show_comparison_page()
-    elif page == "ℹ️ About":
-        show_about_page()
 
-
-def show_home_page():
-    """Display home page with project overview"""
-    st.title("🔬 Unified Explainable AI Platform")
-    st.markdown("### Multi-Modal Classification with Explainability")
-    
-    st.markdown("---")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("#### 🎵 Audio Deepfake Detection")
-        st.markdown("""
-        - **Input**: Audio files (.wav)
-        - **Task**: Classify audio as Real or Fake
-        - **Models**: MobileNet, VGG16, ResNet, Custom CNN
-        - **Dataset**: Fake-or-Real (FoR)
-        - **XAI Methods**: LIME, Grad-CAM, SHAP
-        """)
-        
-    with col2:
-        st.markdown("#### 🫁 Lung Cancer Detection")
-        st.markdown("""
-        - **Input**: Chest X-ray images
-        - **Task**: Classify as Benign or Malignant
-        - **Models**: AlexNet, DenseNet, VGG16
-        - **Dataset**: CheXpert
-        - **XAI Methods**: LIME, Grad-CAM, SHAP
-        """)
-    
-    st.markdown("---")
-    
-    st.markdown("### ✨ Key Features")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("#### 🎯 Multi-Modal Support")
-        st.info("Seamlessly handles both audio and image inputs with automatic modality detection")
-    
-    with col2:
-        st.markdown("#### 🧠 Multiple XAI Methods")
-        st.success("Compare LIME, Grad-CAM, and SHAP explanations side-by-side")
-    
-    with col3:
-        st.markdown("#### ⚡ Smart Filtering")
-        st.warning("Automatic compatibility checking ensures only valid XAI methods are shown")
-    
-    st.markdown("---")
-    
-    st.markdown("### 🚀 Quick Start")
-    st.markdown("""
-    1. Navigate to **Classification & XAI** page
-    2. Upload an audio file (.wav) or chest X-ray image
-    3. Select a compatible model
-    4. Choose XAI method(s) to apply
-    5. View classification results and explanations
-    6. Compare multiple XAI methods in the **XAI Comparison** tab
-    """)
 
 
 def show_classification_page():
     """Main classification and XAI page"""
-    st.title("📊 Classification & Explainability")
+    st.title("Classification & Explainability")
     
     # File upload section
-    st.markdown("### 1️⃣ Upload Input File")
+    st.markdown("### 1 - Upload Input File")
     
     col1, col2 = st.columns([2, 1])
     
@@ -172,7 +109,7 @@ def show_classification_page():
         st.markdown("---")
         
         # Model selection
-        st.markdown("### 2️⃣ Select Model")
+        st.markdown("### 2 - Select Model")
         
         model_loader = ModelLoader(models_dir='models')
         available_models = model_loader.get_available_models(st.session_state.modality)
@@ -198,9 +135,9 @@ def show_classification_page():
         st.markdown("---")
         
         # Classification
-        st.markdown("### 3️⃣ Classify Input")
+        st.markdown("###  3 - Classify Input")
         
-        if st.button("🎯 Run Classification", type="primary"):
+        if st.button("Run Classification", type="primary"):
             with st.spinner("Processing input and running classification..."):
                 try:
                     # Preprocess input
@@ -264,7 +201,7 @@ def show_classification_page():
                     
                     # Show preprocessed input
                     if st.session_state.modality == 'audio':
-                        with st.expander("📊 View Spectrogram"):
+                        with st.expander("View Spectrogram"):
                             st.image(
                                 st.session_state.preprocessed_input,
                                 caption="Mel-Spectrogram",
@@ -278,7 +215,7 @@ def show_classification_page():
         # XAI Section
         if st.session_state.predictions is not None:
             st.markdown("---")
-            st.markdown("### 4️⃣ Explain Predictions (XAI)")
+            st.markdown("### 4 - Explain Predictions (XAI)")
             
             # Get compatible XAI methods
             compatible_methods = XAICompatibilityChecker.get_compatible_methods(
@@ -286,9 +223,9 @@ def show_classification_page():
             )
             
             xai_display_names = {
-                'lime': '🔍 LIME - Local Interpretable Model-agnostic Explanations',
-                'gradcam': '🔥 Grad-CAM - Gradient-weighted Class Activation Mapping',
-                'shap': '🎯 SHAP - SHapley Additive exPlanations'
+                'lime': 'LIME - Local Interpretable Model-agnostic Explanations',
+                'gradcam': 'Grad-CAM - Gradient-weighted Class Activation Mapping',
+                'shap': 'SHAP - SHapley Additive exPlanations'
             }
             
             selected_xai = st.selectbox(
@@ -298,7 +235,7 @@ def show_classification_page():
                 help="Choose an explainability method compatible with your input"
             )
             
-            if st.button("🔬 Generate Explanation", type="primary"):
+            if st.button("Generate Explanation", type="primary"):
                 with st.spinner(f"Generating {selected_xai.upper()} explanation..."):
                     try:
                         # Load model again
@@ -352,7 +289,18 @@ def show_classification_page():
                         
                         st.success(f"✅ {selected_xai.upper()} explanation generated successfully!")
                         
-                        st.info("💡 Tip: Go to the 'XAI Comparison' tab to compare multiple explanations side-by-side")
+                        st.markdown("### Understanding Different XAI Methods:")
+    
+                        st.markdown("""                      
+                        - **LIME**: Highlights superpixels/regions that contributed most to the prediction. 
+                        Good for understanding local decision boundaries.
+                        
+                        - **Grad-CAM**: Shows which spatial regions the model focused on using gradient information.
+                        Excellent for localization in images/spectrograms.
+                        
+                        - **SHAP**: Provides pixel-level attribution based on game theory (Shapley values).
+                        Offers comprehensive and theoretically grounded explanations.
+                        """)
                         
                     except Exception as e:
                         st.error(f"❌ Error generating explanation: {str(e)}")
@@ -427,127 +375,9 @@ def show_comparison_page():
       Offers comprehensive and theoretically grounded explanations.
     """)
     
-    if st.button("🗑️ Clear All Results"):
+    if st.button("Clear All Results"):
         st.session_state.xai_results = {}
         st.rerun()
-
-
-def show_about_page():
-    """Display about page with project information"""
-    st.title("ℹ️ About This Project")
-    
-    st.markdown("### 🎓 Academic Project")
-    st.markdown("""
-    This unified XAI platform was developed as part of an academic project 
-    on Explainable AI for multi-modal classification tasks.
-    """)
-    
-    st.markdown("---")
-    
-    st.markdown("### 👥 Team Information")
-    st.info("""
-    **Group**: [Your TD Group Number]  
-    **Team Members**:
-    - [Student Name 1]
-    - [Student Name 2]
-    - [Student Name 3]
-    - [Student Name 4]
-    - [Student Name 5]
-    """)
-    
-    st.markdown("---")
-    
-    st.markdown("### 🔄 Project Integration")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("#### Original Repository 1")
-        st.markdown("""
-        **Deepfake Audio Detection with XAI**
-        - Authors: Aamir Hullur, Atharva Gurav, Aditi Govindu, Parth Godse
-        - Focus: Audio deepfake detection using spectrograms
-        - Models: VGG16, MobileNet, ResNet, Custom CNN
-        - XAI: LIME, Grad-CAM, SHAP
-        """)
-    
-    with col2:
-        st.markdown("#### Original Repository 2")
-        st.markdown("""
-        **Lung Cancer Detection**
-        - Authors: schaudhuri16
-        - Focus: Medical image classification
-        - Models: AlexNet, DenseNet
-        - XAI: Grad-CAM
-        """)
-    
-    st.markdown("---")
-    
-    st.markdown("### 🤖 Generative AI Usage Statement")
-    st.warning("""
-    **Transparency Declaration:**
-    
-    This project utilized generative AI tools to assist with:
-    
-    1. **Code Refactoring**: Restructuring and modularizing existing codebases
-    2. **Architecture Design**: Planning the unified platform structure
-    3. **Documentation**: Generating comprehensive README and technical documentation
-    4. **Debugging**: Identifying and resolving integration issues
-    5. **Best Practices**: Implementing Python packaging and code organization standards
-    
-    **Tools Used:**
-    - GitHub Copilot (Claude Sonnet 4.5)
-    - Used for code generation, documentation, and architectural guidance
-    
-    **Human Contributions:**
-    - Project requirements definition
-    - Design decisions and architecture choices
-    - Integration strategy
-    - Testing and validation
-    - Final review and quality assurance
-    """)
-    
-    st.markdown("---")
-    
-    st.markdown("### 🛠️ Technical Stack")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("**Deep Learning**")
-        st.markdown("""
-        - TensorFlow
-        - Keras
-        - NumPy
-        """)
-    
-    with col2:
-        st.markdown("**XAI Methods**")
-        st.markdown("""
-        - LIME
-        - SHAP
-        - Grad-CAM
-        """)
-    
-    with col3:
-        st.markdown("**Libraries**")
-        st.markdown("""
-        - Streamlit
-        - Librosa
-        - OpenCV
-        - Scikit-image
-        """)
-    
-    st.markdown("---")
-    
-    st.markdown("### 📚 References")
-    st.markdown("""
-    1. Original Deepfake Audio Detection repository
-    2. Original Lung Cancer Detection repository
-    3. LIME: "Why Should I Trust You?" - Ribeiro et al.
-    4. Grad-CAM: Visual Explanations from Deep Networks - Selvaraju et al.
-    5. SHAP: A Unified Approach to Interpreting Model Predictions - Lundberg & Lee
-    """)
 
 
 if __name__ == "__main__":

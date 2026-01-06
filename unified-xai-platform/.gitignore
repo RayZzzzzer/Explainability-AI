@@ -27,6 +27,7 @@ wheels/
 venv/
 ENV/
 env/
+.venv/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -50,14 +51,6 @@ data/image_uploads/*
 !data/audio_uploads/.gitkeep
 !data/image_uploads/.gitkeep
 
-# Models (too large for git)
-models/audio/*.h5
-models/audio/*.pb
-models/image/*.h5
-models/image/*.pb
-models/audio/variables/
-models/image/variables/
-
 # Temporary files
 temp_spectrogram.png
 melspectrogram.png
@@ -75,3 +68,7 @@ checkpoint
 # XAI outputs (if saved)
 xai_outputs/
 explanations/
+
+# data folder
+Audio_fake/
+Audio_real/
