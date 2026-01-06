@@ -1,0 +1,34 @@
+# Unified XAI Platform - Python Dependencies
+
+# Deep Learning
+tensorflow>=2.12.0
+keras>=2.12.0
+numpy>=1.23.0
+
+# Audio Processing
+librosa>=0.10.0
+soundfile>=0.12.0
+
+# Image Processing
+Pillow>=9.5.0
+opencv-python>=4.7.0
+scikit-image>=0.20.0
+
+# XAI Methods
+lime>=0.2.0.1
+shap>=0.41.0
+
+# Web Interface
+streamlit>=1.28.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Utilities
+pandas>=2.0.0
+scipy>=1.10.0
+scikit-learn>=1.2.0
+
+# Optional: For better performance
+# tensorflow-gpu>=2.12.0  # Uncomment if you have CUDA-enabled GPU
