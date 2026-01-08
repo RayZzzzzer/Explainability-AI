@@ -15,7 +15,7 @@ class XAICompatibilityChecker:
         },
         'image': {
             'lime': True,
-            'gradcam': True,
+            'gradcam': False,
             'shap': True
         }
     }
@@ -56,8 +56,3 @@ class XAICompatibilityChecker:
             for method, compatible in cls.COMPATIBILITY[modality].items() 
             if compatible
         ]
-    
-    @classmethod
-    def get_all_methods(cls):
-        """Get list of all available XAI methods"""
-        return ['lime', 'gradcam', 'shap']

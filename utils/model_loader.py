@@ -29,7 +29,16 @@ class ModelLoader:
     }
     
     def __init__(self, models_dir='models'):
-        self.models_dir = models_dir
+        # Convert to absolute path if relative
+        if not os.path.isabs(models_dir):
+            # Get the directory of the current file (utils/)
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            # Go up one level to the project root
+            project_root = os.path.dirname(current_dir)
+            # Join with models_dir
+            self.models_dir = os.path.join(project_root, models_dir)
+        else:
+            self.models_dir = models_dir
         self.loaded_models = {}
     
     def get_available_models(self, modality):
@@ -72,6 +81,12 @@ class ModelLoader:
             if os.path.isdir(item_path):
                 # Check if it's a SavedModel
                 if os.path.exists(os.path.join(item_path, 'saved_model.pb')):
+                    # Skip if a .h5 file with the same name exists (prefer .h5)
+                    h5_path = os.path.join(modality_dir, f"{item}.h5")
+                    if os.path.exists(h5_path):
+                        print(f"Skipping SavedModel '{item}' because .h5 file exists")
+                        continue
+                    
                     model_name = self._format_model_name(item)
                     
                     available_models[item] = {
@@ -96,27 +111,6 @@ class ModelLoader:
         # Replace underscores with spaces and capitalize
         name = model_key.replace('_', ' ').title()
         return name
-    
-    def get_model_path(self, modality, model_key):
-        """Get the file path for a model"""
-        return os.path.join(self.models_dir, modality, f"{model_key}.h5")
-    
-    def model_exists(self, modality, model_key):
-        """Check if a model file exists"""
-        path = self.get_model_path(modality, model_key)
-        return os.path.exists(path)
-    
-    def list_available_model_files(self, modality):
-        """List all .h5 model files in the modality directory"""
-        modality_dir = os.path.join(self.models_dir, modality)
-        if not os.path.exists(modality_dir):
-            return []
-        
-        return [
-            f.replace('.h5', '') 
-            for f in os.listdir(modality_dir) 
-            if f.endswith('.h5')
-        ]
     
     def load_model(self, modality, model_key):
         """
@@ -150,52 +144,38 @@ class ModelLoader:
         # Also check for SavedModel format
         savedmodel_path = os.path.join(self.models_dir, modality, model_key)
         
-        # Try .h5 format
+        # Try .h5 format first (priority over SavedModel for better compatibility)
         if os.path.exists(model_path):
+            print(f"Loading model from {model_path}")
+            
+            # Try multiple loading strategies for compatibility
             try:
-                print(f"Loading model from {model_path}")
-                # Try loading with compile=False and custom_objects for legacy models
+                # Strategy 1: Try with safe_mode=False for legacy models
+                import inspect
+                sig = inspect.signature(keras.models.load_model)
+                if 'safe_mode' in sig.parameters:
+                    model = keras.models.load_model(model_path, compile=False, safe_mode=False)
+                else:
+                    model = keras.models.load_model(model_path, compile=False)
+                print("Model loaded successfully")
+            except Exception as e1:
+                print(f"Standard loading failed: {e1}")
+                # Strategy 2: Try with tf.keras directly (better backward compatibility)
                 try:
-                    # Custom deserializer for legacy DTypePolicy objects
-                    def dtype_policy_deserializer(**kwargs):
-                        """Deserializer for legacy DTypePolicy objects"""
-                        # Just return a simple dtype string
-                        config = kwargs.get('config', kwargs)
-                        if isinstance(config, dict) and 'name' in config:
-                            return config['name']
-                        return 'float32'
-                    
-                    custom_objects = {
-                        'DTypePolicy': dtype_policy_deserializer,
-                    }
-                    
-                    model = keras.models.load_model(
-                        model_path, 
-                        compile=False,
-                        custom_objects=custom_objects
-                    )
-                    print("Model loaded successfully (without compilation)")
-                    
-                    # Get input and output shapes
-                    print(f"Model input shape: {model.input_shape}")
-                    print(f"Model output shape: {model.output_shape}")
-                    
-                    # Recompile with default optimizer
-                    model.compile(
-                        optimizer='adam', 
-                        loss='categorical_crossentropy', 
-                        metrics=['accuracy']
-                    )
-                    return model
-                except Exception as e1:
-                    print(f"Error loading with custom_objects: {e1}")
-                    # Last resort: try default load
-                    model = keras.models.load_model(model_path)
-                    return model
-            except Exception as e:
-                print(f"Error loading .h5 model: {e}")
+                    import tensorflow as tf
+                    model = tf.keras.models.load_model(model_path, compile=False)
+                    print("Model loaded with tf.keras")
+                except Exception as e2:
+                    print(f"tf.keras loading failed: {e2}")
+                    raise e1  # Raise original error
+            
+            # Get input and output shapes
+            print(f"Model input shape: {model.input_shape}")
+            print(f"Model output shape: {model.output_shape}")
+            
+            return model
         
-        # Try SavedModel format
+        # Try SavedModel format (only if .h5 doesn't exist)
         if os.path.exists(savedmodel_path) and os.path.isdir(savedmodel_path):
             try:
                 print(f"Loading model from {savedmodel_path}")
@@ -204,6 +184,7 @@ class ModelLoader:
                 return model
             except Exception as e:
                 print(f"Error loading SavedModel: {e}")
+                raise
         
         # If no real model found, raise error
         raise FileNotFoundError(
@@ -213,8 +194,3 @@ class ModelLoader:
             f"  - {savedmodel_path}\n"
             f"Please ensure the model files are present in the models directory."
         )
-    
-    def get_model_info(self, model_key, modality):
-        """Get metadata about a model"""
-        models = self.get_available_models(modality)
-        return models.get(model_key, None)

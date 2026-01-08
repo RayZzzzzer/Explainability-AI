@@ -39,6 +39,10 @@ if 'preprocessed_input' not in st.session_state:
     st.session_state.preprocessed_input = None
 if 'predictions' not in st.session_state:
     st.session_state.predictions = None
+if 'predictions_2class' not in st.session_state:
+    st.session_state.predictions_2class = None
+if 'predicted_class' not in st.session_state:
+    st.session_state.predicted_class = None
 if 'xai_results' not in st.session_state:
     st.session_state.xai_results = {}
 
@@ -175,9 +179,24 @@ def show_classification_page():
                     predictions = model.predict(preprocessed)
                     st.session_state.predictions = predictions
                     
-                    # Display results
-                    predicted_class = np.argmax(predictions[0])
+                    # Handle different output formats
                     class_names = model_info['classes']
+                    
+                    # Check if model outputs single value (sigmoid) or two values (softmax)
+                    if predictions[0].shape[0] == 1:
+                        # Single output (sigmoid): convert to two-class probabilities
+                        prob_class1 = float(predictions[0][0])
+                        prob_class0 = 1.0 - prob_class1
+                        predictions_2class = np.array([[prob_class0, prob_class1]])
+                        predicted_class = 1 if prob_class1 > 0.5 else 0
+                    else:
+                        # Two outputs (softmax): use as-is
+                        predictions_2class = predictions
+                        predicted_class = np.argmax(predictions[0])
+                    
+                    # Store processed predictions for XAI methods
+                    st.session_state.predictions_2class = predictions_2class
+                    st.session_state.predicted_class = predicted_class
                     
                     st.success("✅ Classification Complete!")
                     
@@ -187,7 +206,7 @@ def show_classification_page():
                         st.metric(
                             "Predicted Class",
                             class_names[predicted_class],
-                            f"{predictions[0][predicted_class]*100:.2f}% confidence"
+                            f"{predictions_2class[0][predicted_class]*100:.2f}% confidence"                             
                         )
                     
                     with col2:
@@ -195,8 +214,8 @@ def show_classification_page():
                         st.markdown("**Class Probabilities:**")
                         for i, class_name in enumerate(class_names):
                             st.progress(
-                                float(predictions[0][i]),
-                                text=f"{class_name}: {predictions[0][i]*100:.1f}%"
+                                float(predictions_2class[0][i]),
+                                text=f"{class_name}: {predictions_2class[0][i]*100:.1f}%"
                             )
                     
                     # Show preprocessed input
@@ -248,18 +267,40 @@ def show_classification_page():
                         
                         if selected_xai == 'lime':
                             explainer = LIMEExplainer()
+                            # Get model's expected input size
+                            target_size = model_info['input_shape'][:2]  # (height, width)
                             result = explainer.explain(
                                 st.session_state.preprocessed_input,
                                 model,
-                                class_names
+                                class_names,
+                                target_size=target_size
                             )
                             fig = explainer.visualize(result)
                             
                         elif selected_xai == 'gradcam':
                             explainer = GradCAMExplainer(model)
-                            predicted_class = np.argmax(st.session_state.predictions[0])
+                            # Use the stored predicted class to ensure consistency
+                            predicted_class = st.session_state.predicted_class
+                            
+                            # Preprocess input for Grad-CAM (handles both audio spectrograms and images)
+                            from PIL import Image
+                            if isinstance(st.session_state.preprocessed_input, Image.Image):
+                                # Both audio spectrograms and images are PIL Images
+                                if st.session_state.modality == 'image':
+                                    preprocessor = ImagePreprocessor()
+                                else:  # audio
+                                    preprocessor = AudioPreprocessor()
+                                
+                                # Convert PIL image to array and preprocess
+                                img_for_gradcam = preprocessor.preprocess_for_model(st.session_state.preprocessed_input)
+                                # Remove batch dimension for Grad-CAM (it will add it back)
+                                img_for_gradcam = img_for_gradcam[0]
+                            else:
+                                # Already preprocessed array
+                                img_for_gradcam = st.session_state.preprocessed_input
+                            
                             result = explainer.explain(
-                                st.session_state.preprocessed_input,
+                                img_for_gradcam,
                                 class_idx=predicted_class
                             )
                             fig = explainer.visualize(
@@ -268,46 +309,25 @@ def show_classification_page():
                             )
                             
                         elif selected_xai == 'shap':
-                            # Create background data based on preprocessed input
-                            preprocessor = AudioPreprocessor() if st.session_state.modality == 'audio' else ImagePreprocessor()
+                            # Get model's expected input size
+                            target_size = model_info['input_shape'][:2]  # (height, width)
                             
-                            # Get the actual shape from the preprocessed input
-                            if st.session_state.modality == 'audio':
-                                # For audio, create background from preprocessed spectrogram
-                                from PIL import Image
-                                if isinstance(st.session_state.preprocessed_input, Image.Image):
-                                    img_array = np.array(st.session_state.preprocessed_input)
-                                else:
-                                    img_array = st.session_state.preprocessed_input
-                                
-                                # Create background with same shape
-                                preprocessed_bg = preprocessor.preprocess_for_model(
-                                    Image.fromarray((np.zeros_like(img_array) * 255).astype(np.uint8))
-                                )
-                                background = preprocessed_bg
-                            else:
-                                # For images
-                                from PIL import Image
-                                img = Image.open(uploaded_file)
-                                # Create a black background image
-                                bg_img = Image.new('RGB', img.size, color='black')
-                                background = preprocessor.preprocess_for_model(bg_img)
-                            
-                            # Create multiple background samples with variation for better SHAP estimation
-                            processed_img = st.session_state.preprocessed_input
-                            # Convert to numpy array if it's a PIL Image
-                            if isinstance(processed_img, Image.Image):
-                                processed_img = np.array(processed_img)
-                            
-                            background_samples = np.zeros((10,) + processed_img.shape)
+                            # Create background samples with correct shape
+                            # Background should be (num_samples, height, width, channels)
+                            input_shape = tuple(model_info['input_shape'])
+                            background_samples = []
                             for i in range(10):
-                                # Create varied backgrounds from 0% to 90% of original image intensity
-                                background_samples[i] = processed_img * (i / 10.0)
+                                # Create varied backgrounds from 0% to 90% intensity
+                                background = np.ones(input_shape) * (i / 10.0)
+                                background_samples.append(background)
+                            background_samples = np.array(background_samples)
                             
                             explainer = SHAPExplainer(model, background_samples)
                             result = explainer.explain(
                                 st.session_state.preprocessed_input,
-                                nsamples=500  # Increase samples for better accuracy
+                                normalize=True,
+                                nsamples=500,
+                                target_size=target_size
                             )
                             fig = explainer.visualize(result, class_names)
                         
