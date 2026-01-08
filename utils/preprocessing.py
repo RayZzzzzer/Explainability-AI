@@ -17,11 +17,6 @@ class AudioPreprocessor:
     def __init__(self, target_size=(224, 224)):
         self.target_size = target_size
     
-    def load_audio(self, audio_path):
-        """Load audio file"""
-        audio, sr = librosa.load(audio_path, sr=self.sample_rate)
-        return audio, sr
-    
     def create_spectrogram(self, audio_path, output_path='temp_spectrogram.png'):
         """
         Convert audio to mel-spectrogram image
@@ -53,59 +48,6 @@ class AudioPreprocessor:
         spec_image = load_img(output_path, target_size=self.target_size)
         
         return spec_image
-
-    def create_spectrogram_new(self, audio_path, save_path='temp_spectrogram.png'):
-        """
-        Create mel-spectrogram from audio file
-        
-        Args:
-            audio_path: Path to audio file
-            save_path: Where to save the spectrogram image
-            
-        Returns:
-            PIL Image of the spectrogram
-        """
-        # Load audio
-        audio, sr = self.load_audio(audio_path)
-        
-        # Create mel-spectrogram
-        mel_spec = librosa.feature.melspectrogram(
-            y=audio,
-            sr=sr,
-            n_mels=self.n_mels,
-            fmax=self.fmax
-        )
-        
-        # Convert to dB scale
-        mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
-        
-        # Normalize to 0-255 range for image
-        mel_spec_normalized = (mel_spec_db - mel_spec_db.min()) / (mel_spec_db.max() - mel_spec_db.min())
-        mel_spec_normalized = (mel_spec_normalized * 255).astype(np.uint8)
-        
-        # Create figure WITHOUT axes, labels, etc.
-        fig, ax = plt.subplots(figsize=(10, 4))
-        ax.axis('off')
-        
-        # Display spectrogram without decorations
-        im = ax.imshow(
-            mel_spec_db,
-            aspect='auto',
-            origin='lower',
-            cmap='viridis',
-            interpolation='bilinear'
-        )
-        
-        # Remove all margins and padding
-        plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
-        
-        # Save to file without any padding or borders
-        plt.savefig(save_path, bbox_inches='tight', pad_inches=0, dpi=100)
-        plt.close(fig)
-        
-        # Load as PIL Image
-        img = Image.open(save_path)
-        return img
     
     def preprocess_for_model(self, spectrogram_image, target_size=(224, 224)):
         """
@@ -171,17 +113,3 @@ class ImagePreprocessor:
         img_array = np.expand_dims(img_array, axis=0)
         
         return img_array
-    
-    def apply_clahe(self, image):
-        """Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)"""
-        import cv2
-        
-        # Convert to grayscale
-        gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
-        
-        # Apply CLAHE
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        enhanced = clahe.apply(gray)
-        
-        # Convert back to PIL
-        return Image.fromarray(enhanced)

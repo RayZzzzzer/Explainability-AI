@@ -112,27 +112,6 @@ class ModelLoader:
         name = model_key.replace('_', ' ').title()
         return name
     
-    def get_model_path(self, modality, model_key):
-        """Get the file path for a model"""
-        return os.path.join(self.models_dir, modality, f"{model_key}.h5")
-    
-    def model_exists(self, modality, model_key):
-        """Check if a model file exists"""
-        path = self.get_model_path(modality, model_key)
-        return os.path.exists(path)
-    
-    def list_available_model_files(self, modality):
-        """List all .h5 model files in the modality directory"""
-        modality_dir = os.path.join(self.models_dir, modality)
-        if not os.path.exists(modality_dir):
-            return []
-        
-        return [
-            f.replace('.h5', '') 
-            for f in os.listdir(modality_dir) 
-            if f.endswith('.h5')
-        ]
-    
     def load_model(self, modality, model_key):
         """
         Load a model (or create dummy for testing)
@@ -215,8 +194,3 @@ class ModelLoader:
             f"  - {savedmodel_path}\n"
             f"Please ensure the model files are present in the models directory."
         )
-    
-    def get_model_info(self, model_key, modality):
-        """Get metadata about a model"""
-        models = self.get_available_models(modality)
-        return models.get(model_key, None)

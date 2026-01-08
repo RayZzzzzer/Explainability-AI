@@ -122,7 +122,7 @@ class SHAPExplainer:
         self.explainer_type = 'integrated_gradients'
         self.background_data = background_data
     
-    def explain(self, image, normalize=True, nsamples=100):
+    def explain(self, image, normalize=True, nsamples=100, target_size=(224, 224)):
         """
         Generate explanation for an image.
         
@@ -130,28 +130,47 @@ class SHAPExplainer:
             image: Input image (numpy array or PIL Image)
             normalize: Whether to normalize input to [0, 1]
             nsamples: Number of samples for SHAP (ignored for Integrated Gradients)
+            target_size: Model's expected input size (height, width)
             
         Returns:
             Dictionary with 'shap_values', 'original_image', 'predicted_class', 'predictions'
         """
-        # Convert PIL Image to numpy array
+        # Convert to PIL Image for resizing
         if isinstance(image, Image.Image):
-            img_array = np.array(image)
+            pil_image = image
         else:
-            img_array = image
+            if image.max() <= 1.0:
+                image = (image * 255).astype(np.uint8)
+            pil_image = Image.fromarray(image.astype(np.uint8))
         
-        # Add batch dimension if needed
-        if len(img_array.shape) == 3:
-            img_input = np.expand_dims(img_array, axis=0)
-        else:
-            img_input = img_array
+        # Ensure RGB
+        if pil_image.mode != 'RGB':
+            pil_image = pil_image.convert('RGB')
         
-        # Normalize if requested
-        if normalize and img_input.max() > 1:
-            img_input = img_input.astype(np.float32) / 255.0
+        # Resize to target size
+        pil_image_resized = pil_image.resize(target_size)
+        img_array = np.array(pil_image_resized)
         
-        # Get prediction
-        predictions = self.model.predict(img_input, verbose=0)
+        # Add batch dimension
+        img_input = np.expand_dims(img_array, axis=0)
+        
+        # Normalize to [0, 1]
+        if normalize and img_input.max() > 1.0:
+            img_input = img_input.astype('float32') / 255.0
+        
+        # Create prediction wrapper to handle sigmoid outputs
+        def predict_wrapper(x):
+            preds = self.model.predict(x, verbose=0)
+            # Handle single output (sigmoid) models
+            if preds.shape[-1] == 1:
+                # Convert to 2-class probabilities
+                prob_class1 = preds[:, 0]
+                prob_class0 = 1.0 - prob_class1
+                return np.column_stack([prob_class0, prob_class1])
+            return preds
+        
+        # Get predictions using wrapper
+        predictions = predict_wrapper(img_input)
         predicted_class = np.argmax(predictions[0])
         
         # Compute attribution
@@ -172,6 +191,9 @@ class SHAPExplainer:
                 shap_values = shap_vals[predicted_class][0]
             else:
                 shap_values = shap_vals[0]
+        
+        # Ensure shap_values is 3D (height, width, channels), not 4D
+        shap_values = np.squeeze(shap_values)
         
         return {
             'shap_values': shap_values,
@@ -204,10 +226,19 @@ class SHAPExplainer:
         
         # Attribution heatmap
         # Sum across channels for visualization
+        if len(shap_values.shape) == 4:
+            # Remove any extra dimensions first (batch dimension)
+            shap_values = np.squeeze(shap_values)
+        
         if len(shap_values.shape) == 3:
             shap_viz = np.sum(np.abs(shap_values), axis=-1)
-        else:
+        elif len(shap_values.shape) == 2:
             shap_viz = np.abs(shap_values)
+        else:
+            # Fallback: try to reshape
+            shap_viz = np.abs(shap_values.reshape(shap_values.shape[0], shap_values.shape[1], -1))
+            if shap_viz.shape[-1] > 1:
+                shap_viz = np.sum(shap_viz, axis=-1)
         
         # Normalize
         if shap_viz.max() > 0:
@@ -224,54 +255,5 @@ class SHAPExplainer:
         plt.colorbar(im, ax=axes[1], fraction=0.046, pad=0.04)
         plt.tight_layout()
         
-        return fig
-    
-    def visualize_detailed(self, explanation_result, class_names=None, figsize=(15, 5)):
-        """
-        Create detailed visualization with predictions.
-        
-        Args:
-            explanation_result: Result from explain()
-            class_names: List of class names
-            figsize: Figure size
-            
-        Returns:
-            Matplotlib figure
-        """
-        shap_values = explanation_result['shap_values']
-        predicted_class = explanation_result['predicted_class']
-        predictions = explanation_result['predictions']
-        
-        fig, axes = plt.subplots(1, 3, figsize=figsize)
-        
-        # Original image
-        axes[0].imshow(explanation_result['original_image'])
-        axes[0].set_title('Original Image')
-        axes[0].axis('off')
-        
-        # Attribution heatmap
-        if len(shap_values.shape) == 3:
-            shap_viz = np.sum(np.abs(shap_values), axis=-1)
-        else:
-            shap_viz = np.abs(shap_values)
-        
-        if shap_viz.max() > 0:
-            shap_viz = shap_viz / shap_viz.max()
-        
-        im = axes[1].imshow(shap_viz, cmap='hot', interpolation='bilinear')
-        axes[1].set_title('Attribution Map')
-        axes[1].axis('off')
-        plt.colorbar(im, ax=axes[1], fraction=0.046, pad=0.04)
-        
-        # Prediction probabilities
-        if class_names is None:
-            class_names = [f'Class {i}' for i in range(len(predictions))]
-        
-        axes[2].barh(class_names, predictions)
-        axes[2].set_xlabel('Probability')
-        axes[2].set_title('Class Probabilities')
-        axes[2].set_xlim([0, 1])
-        
-        plt.tight_layout()
         return fig
 

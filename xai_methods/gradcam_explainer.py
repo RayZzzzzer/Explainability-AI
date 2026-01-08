@@ -50,6 +50,29 @@ class GradCAMExplainer:
                 print(f"Using conv layer by name: {layer.name}")
                 return layer.name
         
+        # For transfer learning models, try to find layers within nested models
+        print("No direct conv layers found, checking for nested models (transfer learning)...")
+        for layer in self.model.layers:
+            layer_class = layer.__class__.__name__
+            # Check if it's a Model (like MobileNet, ResNet, etc.)
+            if 'Model' in layer_class or 'Functional' in layer_class:
+                print(f"Found nested model: {layer.name}")
+                # Look for conv layers inside
+                try:
+                    nested_conv_layers = []
+                    for sublayer in layer.layers:
+                        sublayer_class = sublayer.__class__.__name__
+                        if 'Conv' in sublayer_class:
+                            nested_conv_layers.append(sublayer.name)
+                            print(f"  Found conv layer: {sublayer.name} (type: {sublayer_class})")
+                    if nested_conv_layers:
+                        print(f"Using last conv layer from nested model: {nested_conv_layers[-1]}")
+                        # Return the sublayer name
+                        return nested_conv_layers[-1]
+                except Exception as e:
+                    print(f"  Error accessing nested model layers: {e}")
+                    pass
+        
         # Print all layer names for debugging
         print("Available layers:")
         for layer in self.model.layers:
@@ -89,14 +112,57 @@ class GradCAMExplainer:
         
         # Get prediction if class_idx not provided
         if class_idx is None:
-            predictions = self.model.predict(img_input)
-            class_idx = np.argmax(predictions[0])
+            predictions = self.model.predict(img_input, verbose=0)
+            # Handle sigmoid outputs
+            if predictions.shape[-1] == 1:
+                class_idx = 1 if predictions[0][0] > 0.5 else 0
+            else:
+                class_idx = np.argmax(predictions[0])
         
         # Create gradient model
+        nested_model = None
+        last_conv_layer = None
+        
+        # First try to get the layer directly
         try:
             last_conv_layer = self.model.get_layer(self.layer_name)
-        except:
-            # Fallback: try to find any conv layer
+            print(f"Found target layer directly: {self.layer_name}")
+        except Exception as e:
+            print(f"Layer {self.layer_name} not found in main model: {e}")
+            
+        # If not found, search in nested models
+        if last_conv_layer is None:
+            print("Searching in nested models (transfer learning)...")
+            for layer in self.model.layers:
+                if hasattr(layer, 'layers'):  # It's a nested model
+                    try:
+                        last_conv_layer = layer.get_layer(self.layer_name)
+                        nested_model = layer
+                        print(f"Found layer in nested model '{layer.name}': {self.layer_name}")
+                        break
+                    except:
+                        continue
+        
+        # If still not found, try to find any conv layer
+        if last_conv_layer is None:
+            print("Layer not found, searching for any conv layer...")
+            self.layer_name = self._find_last_conv_layer()
+            try:
+                last_conv_layer = self.model.get_layer(self.layer_name)
+            except:
+                # Try in nested models
+                for layer in self.model.layers:
+                    if hasattr(layer, 'layers'):
+                        try:
+                            last_conv_layer = layer.get_layer(self.layer_name)
+                            nested_model = layer
+                            print(f"Found fallback layer in nested model '{layer.name}': {self.layer_name}")
+                            break
+                        except:
+                            continue
+        
+        if last_conv_layer is None:
+            raise ValueError(f"Could not find layer '{self.layer_name}' in model or nested models")
             self.layer_name = self._find_last_conv_layer()
             last_conv_layer = self.model.get_layer(self.layer_name)
         
@@ -113,73 +179,47 @@ class GradCAMExplainer:
         # Build a model that returns both the conv layer output and final predictions
         try:
             print(f"Attempting to create grad_model with inputs={self.model.inputs}, conv_layer={self.layer_name}")
-            grad_model = keras.models.Model(
-                inputs=self.model.inputs,
-                outputs=[last_conv_layer.output, self.model.output]
-            )
-            print("Grad model created successfully!")
-        except (AttributeError, ValueError, RuntimeError) as e:
-            print(f"Error creating grad model with model.inputs/output: {e}")
-            print(f"Model type: {type(self.model)}")
-            print(f"Model class: {self.model.__class__.__name__}")
             
-            # Try building a new functional model by calling layers directly
-            try:
-                print("Trying functional API approach...")
-                # Get input tensor
-                input_tensor = keras.Input(shape=self.model.input_shape[1:])
-                
-                # Pass through model to get outputs
-                x = input_tensor
-                for layer in self.model.layers:
-                    x = layer(x)
-                    if layer.name == self.layer_name:
-                        conv_output = x
-                
-                # Create new functional model
+            # If layer is in a nested model, use the nested model's output instead
+            if nested_model is not None:
+                print(f"Layer '{self.layer_name}' is inside nested model '{nested_model.name}'")
+                print(f"Using nested model '{nested_model.name}' output instead (last feature maps before dense layers)")
+                # Use the nested model's output instead of internal layer
                 grad_model = keras.models.Model(
-                    inputs=input_tensor,
-                    outputs=[conv_output, x]
+                    inputs=self.model.input,
+                    outputs=[nested_model.output, self.model.output]
                 )
-                print("Functional model created successfully!")
-            except Exception as e2:
-                print(f"Functional approach also failed: {e2}")
-                
-                # Last resort: use model directly with eager execution
-                try:
-                    print("Trying direct eager execution approach...")
-                    grad_model = None  # We'll compute gradients differently
-                except Exception as e3:
-                    print(f"All approaches failed: {e3}")
-                    raise RuntimeError(f"Could not create gradient model. Try using a different model or XAI method.")
+                print(f"Grad model created using '{nested_model.name}' output!")
+            else:
+                # Layer is directly in main model
+                grad_model = keras.models.Model(
+                    inputs=self.model.input,
+                    outputs=[last_conv_layer.output, self.model.output]
+                )
+                print("Grad model created successfully!")
+        except (AttributeError, ValueError, RuntimeError, KeyError) as e:
+            print(f"Error creating grad model: {e}")
+            print(f"Model type: {type(self.model)}")
+            print(f"Layer type: {type(last_conv_layer)}")
+            
+            # If this fails, we cannot proceed with GradCAM
+            raise RuntimeError(
+                f"Cannot create gradient model for GradCAM. "
+                f"Layer '{self.layer_name}' may not be properly connected in the model graph. "
+                f"This can happen with some model architectures. "
+                f"Try using LIME or SHAP instead."
+            )
         
         # Compute gradients
-        if grad_model is not None:
-            with tf.GradientTape() as tape:
-                conv_outputs, predictions = grad_model(img_input)
-                # Handle single-output models (sigmoid)
-                if predictions.shape[-1] == 1:
-                    class_output = predictions[:, 0] if class_idx == 1 else 1 - predictions[:, 0]
-                else:
-                    class_output = predictions[:, class_idx]
-        else:
-            # Direct computation without intermediate model
-            with tf.GradientTape() as tape:
-                tape.watch(img_input)
-                # Forward pass through layers
-                x = img_input
-                for layer in self.model.layers:
-                    x = layer(x)
-                    if layer.name == self.layer_name:
-                        conv_outputs = x
-                        tape.watch(conv_outputs)
-                predictions = x
-                
-                # Handle single-output models (sigmoid)
-                if predictions.shape[-1] == 1:
-                    class_output = predictions[:, 0] if class_idx == 1 else 1 - predictions[:, 0]
-                else:
-                    class_output = predictions[:, class_idx]
+        # Use GradientTape to compute gradients from conv layer to prediction
+        with tf.GradientTape() as tape:
+            conv_outputs, predictions = grad_model(img_input)
+            
+            # Handle single-output models (sigmoid)
+            if predictions.shape[-1] == 1:
+                class_output = predictions[:, 0] if class_idx == 1 else 1 - predictions[:, 0]
+            else:
+                class_output = predictions[:, class_idx]
         
         # Get gradients
         grads = tape.gradient(class_output, conv_outputs)
