@@ -31,36 +31,43 @@ st.set_page_config(
 )
 
 # Initialize session state
-if 'uploaded_file' not in st.session_state:
-    st.session_state.uploaded_file = None
-if 'modality' not in st.session_state:
-    st.session_state.modality = None
-if 'preprocessed_input' not in st.session_state:
-    st.session_state.preprocessed_input = None
-if 'predictions' not in st.session_state:
-    st.session_state.predictions = None
-if 'predictions_2class' not in st.session_state:
-    st.session_state.predictions_2class = None
-if 'predicted_class' not in st.session_state:
-    st.session_state.predicted_class = None
-if 'xai_results' not in st.session_state:
-    st.session_state.xai_results = {}
+DEFAULT_SESSION_STATE = {
+    'uploaded_file': None,
+    'modality': None,
+    'preprocessed_input': None,
+    'predictions': None,
+    'predictions_2class': None,
+    'predicted_class': None,
+    'class_names': None,
+    'selected_model': None,
+    'xai_results': {}
+}
+
+for key, default_value in DEFAULT_SESSION_STATE.items():
+    if key not in st.session_state:
+        st.session_state[key] = default_value
 
 
-def detect_modality(file):
-    """Detect input modality based on file extension"""
+def detect_modality(file) -> str:
+    """
+    Detect input modality based on file extension.
+    
+    Args:
+        file: Uploaded file object from Streamlit
+        
+    Returns:
+        'audio', 'image', or None if unsupported
+    """
     filename = file.name.lower()
     if filename.endswith('.wav'):
         return 'audio'
     elif filename.endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tiff')):
         return 'image'
-    else:
-        return None
+    return None
 
 
-def main():
-    """Main application entry point"""
-    
+def main() -> None:
+    """Main application entry point - handles page navigation and routing."""
     # Sidebar navigation
     st.sidebar.title("ESILV DIA - XAI PROJECT : Lung Cancer & Audio Deepfake Detection")
     st.sidebar.markdown("---")
@@ -94,6 +101,16 @@ def show_classification_page():
         )
     
     if uploaded_file is not None:
+        # Check if file has changed - reset predictions if so
+        if st.session_state.uploaded_file is None or uploaded_file.name != st.session_state.uploaded_file.name:
+            # New file uploaded - clear previous results
+            st.session_state.predictions = None
+            st.session_state.predictions_2class = None
+            st.session_state.predicted_class = None
+            st.session_state.class_names = None
+            st.session_state.preprocessed_input = None
+            st.session_state.xai_results = {}
+        
         st.session_state.uploaded_file = uploaded_file
         st.session_state.modality = detect_modality(uploaded_file)
         
@@ -130,6 +147,16 @@ def show_classification_page():
         )
         
         selected_model_key, model_info = model_options[selected_model_name]
+        
+        # Check if model has changed - reset predictions if so
+        if st.session_state.selected_model != selected_model_key:
+            st.session_state.predictions = None
+            st.session_state.predictions_2class = None
+            st.session_state.predicted_class = None
+            st.session_state.class_names = None
+            st.session_state.preprocessed_input = None
+            st.session_state.xai_results = {}
+            st.session_state.selected_model = selected_model_key
         
         with st.expander("ℹ️ Model Information"):
             st.write(f"**Description**: {model_info['description']}")
@@ -197,39 +224,46 @@ def show_classification_page():
                     # Store processed predictions for XAI methods
                     st.session_state.predictions_2class = predictions_2class
                     st.session_state.predicted_class = predicted_class
+                    st.session_state.class_names = class_names
                     
                     st.success("✅ Classification Complete!")
-                    
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.metric(
-                            "Predicted Class",
-                            class_names[predicted_class],
-                            f"{predictions_2class[0][predicted_class]*100:.2f}% confidence"                             
-                        )
-                    
-                    with col2:
-                        # Show all class probabilities
-                        st.markdown("**Class Probabilities:**")
-                        for i, class_name in enumerate(class_names):
-                            st.progress(
-                                float(predictions_2class[0][i]),
-                                text=f"{class_name}: {predictions_2class[0][i]*100:.1f}%"
-                            )
-                    
-                    # Show preprocessed input
-                    if st.session_state.modality == 'audio':
-                        with st.expander("View Spectrogram"):
-                            st.image(
-                                st.session_state.preprocessed_input,
-                                caption="Mel-Spectrogram",
-                                use_container_width=True
-                            )
                     
                 except Exception as e:
                     st.error(f"❌ Error during classification: {str(e)}")
                     st.info("Note: For full functionality, trained models need to be placed in the models/ directory")
+        
+        # Display classification results (always shown if available)
+        if st.session_state.predictions is not None:
+            class_names = st.session_state.get('class_names', model_info['classes'])
+            predictions_2class = st.session_state.predictions_2class
+            predicted_class = st.session_state.predicted_class
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.metric(
+                    "Predicted Class",
+                    class_names[predicted_class],
+                    f"{predictions_2class[0][predicted_class]*100:.2f}% confidence"                             
+                )
+            
+            with col2:
+                # Show all class probabilities
+                st.markdown("**Class Probabilities:**")
+                for i, class_name in enumerate(class_names):
+                    st.progress(
+                        float(predictions_2class[0][i]),
+                        text=f"{class_name}: {predictions_2class[0][i]*100:.1f}%"
+                    )
+            
+            # Show preprocessed input
+            if st.session_state.modality == 'audio':
+                with st.expander("View Spectrogram"):
+                    st.image(
+                        st.session_state.preprocessed_input,
+                        caption="Mel-Spectrogram",
+                        use_container_width=True
+                    )
         
         # XAI Section
         if st.session_state.predictions is not None:
@@ -260,7 +294,7 @@ def show_classification_page():
                         # Load model again
                         model = model_loader.load_model(
                             st.session_state.modality,
-                            selected_model_key
+                            selected_model_key,
                         )
                         
                         class_names = model_info['classes']

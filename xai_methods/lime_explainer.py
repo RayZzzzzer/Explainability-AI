@@ -108,9 +108,9 @@ class LIMEExplainer:
             'original_image': img_normalized
         }
     
-    def visualize(self, explanation_result, figsize=(12, 5)):
+    def visualize(self, explanation_result: dict, figsize: tuple[int, int] = (12, 5)):
         """
-        Create visualization of LIME explanation
+        Create visualization of LIME explanation.
         
         Args:
             explanation_result: Result from explain method

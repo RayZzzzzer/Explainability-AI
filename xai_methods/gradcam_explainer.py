@@ -4,22 +4,19 @@ Grad-CAM (Gradient-weighted Class Activation Mapping) implementation
 
 import numpy as np
 import tensorflow as tf
-# Use tf_keras for compatibility
-try:
-    import tf_keras as keras
-except ImportError:
-    from tensorflow import keras
+# Use tf.keras for consistency with model loading
+keras = tf.keras
 import matplotlib.pyplot as plt
 import cv2
 from PIL import Image
 
 
 class GradCAMExplainer:
-    """Grad-CAM explainer for CNN-based models"""
+    """Grad-CAM explainer for CNN-based models."""
     
-    def __init__(self, model, layer_name=None):
+    def __init__(self, model, layer_name: str = None):
         """
-        Initialize Grad-CAM explainer
+        Initialize Grad-CAM explainer.
         
         Args:
             model: Keras model
@@ -28,8 +25,16 @@ class GradCAMExplainer:
         self.model = model
         self.layer_name = layer_name or self._find_last_conv_layer()
         
-    def _find_last_conv_layer(self):
-        """Find the last convolutional layer in the model"""
+    def _find_last_conv_layer(self) -> str:
+        """
+        Find the last convolutional layer in the model.
+        
+        Returns:
+            Name of the last convolutional layer
+            
+        Raises:
+            ValueError: If no convolutional layer is found
+        """
         # Try to find convolutional layers by class type
         conv_layers = []
         
@@ -80,9 +85,9 @@ class GradCAMExplainer:
         
         raise ValueError("No convolutional layer found in model")
     
-    def explain(self, image, class_idx=None, preprocess_fn=None):
+    def explain(self, image, class_idx: int = None, preprocess_fn=None) -> dict:
         """
-        Generate Grad-CAM heatmap
+        Generate Grad-CAM heatmap.
         
         Args:
             image: Input image (PIL Image or numpy array)
@@ -166,7 +171,7 @@ class GradCAMExplainer:
             self.layer_name = self._find_last_conv_layer()
             last_conv_layer = self.model.get_layer(self.layer_name)
         
-        # IMPORTANT: Call model first to build the graph if needed
+        # Call model first to build the graph if needed
         try:
             # Test if model has been built
             _ = self.model.output
@@ -177,30 +182,67 @@ class GradCAMExplainer:
             print("Model built successfully")
         
         # Build a model that returns both the conv layer output and final predictions
+        # IMPORTANT: Use the same keras module as the loaded model for compatibility
+        # Detect which keras was used to create the model
+        model_module = self.model.__class__.__module__
+        if 'tf_keras' in model_module:
+            import tf_keras
+            keras_to_use = tf_keras
+            print("Using tf_keras for grad_model (model was loaded with tf_keras)")
+        else:
+            keras_to_use = keras
+            print("Using keras for grad_model")
+        
         try:
             print(f"Attempting to create grad_model with inputs={self.model.inputs}, conv_layer={self.layer_name}")
+            print(f"Nested model: {nested_model.name if nested_model else 'None'}")
             
-            # If layer is in a nested model, use the nested model's output instead
+            # If layer is in a nested model, ALWAYS use the nested model's output
             if nested_model is not None:
                 print(f"Layer '{self.layer_name}' is inside nested model '{nested_model.name}'")
                 print(f"Using nested model '{nested_model.name}' output instead (last feature maps before dense layers)")
                 # Use the nested model's output instead of internal layer
-                grad_model = keras.models.Model(
+                grad_model = keras_to_use.models.Model(
                     inputs=self.model.input,
                     outputs=[nested_model.output, self.model.output]
                 )
                 print(f"Grad model created using '{nested_model.name}' output!")
             else:
-                # Layer is directly in main model
-                grad_model = keras.models.Model(
-                    inputs=self.model.input,
-                    outputs=[last_conv_layer.output, self.model.output]
-                )
-                print("Grad model created successfully!")
+                # Layer should be directly in main model - try to access it
+                try:
+                    layer_output = last_conv_layer.output
+                    print(f"Accessing layer output for '{self.layer_name}'")
+                    # Layer is directly in main model
+                    grad_model = keras_to_use.models.Model(
+                        inputs=self.model.input,
+                        outputs=[layer_output, self.model.output]
+                    )
+                    print("Grad model created successfully!")
+                except (AttributeError, ValueError, RuntimeError) as layer_error:
+                    print(f"Cannot access layer output directly: {layer_error}")
+                    print("This layer might be in a nested model that wasn't detected. Trying alternative approach...")
+                    
+                    # Last resort: try to find ANY nested model and use its output
+                    found_nested = False
+                    for layer in self.model.layers:
+                        layer_class = layer.__class__.__name__
+                        if 'Model' in layer_class or 'Functional' in layer_class:
+                            print(f"Using nested model '{layer.name}' output as fallback")
+                            grad_model = keras_to_use.models.Model(
+                                inputs=self.model.input,
+                                outputs=[layer.output, self.model.output]
+                            )
+                            print(f"Grad model created using fallback nested model '{layer.name}'!")
+                            found_nested = True
+                            break
+                    
+                    if not found_nested:
+                        raise layer_error
         except (AttributeError, ValueError, RuntimeError, KeyError) as e:
             print(f"Error creating grad model: {e}")
             print(f"Model type: {type(self.model)}")
-            print(f"Layer type: {type(last_conv_layer)}")
+            if last_conv_layer:
+                print(f"Layer type: {type(last_conv_layer)}")
             
             # If this fails, we cannot proceed with GradCAM
             raise RuntimeError(
@@ -212,17 +254,54 @@ class GradCAMExplainer:
         
         # Compute gradients
         # Use GradientTape to compute gradients from conv layer to prediction
-        with tf.GradientTape() as tape:
-            conv_outputs, predictions = grad_model(img_input)
+        try:
+            with tf.GradientTape() as tape:
+                # Convert to tensor to ensure proper input format
+                img_tensor = tf.convert_to_tensor(img_input, dtype=tf.float32)
+                
+                # Try calling grad_model - some models need dictionary input
+                try:
+                    outputs = grad_model(img_tensor)
+                except (ValueError, TypeError) as e:
+                    # If direct call fails, try with dictionary input
+                    if 'input_layer' in str(e) or "doesn't match" in str(e):
+                        print(f"Trying dictionary input format for model compatibility...")
+                        # Get input layer name
+                        input_name = self.model.input.name.split(':')[0] if hasattr(self.model.input, 'name') else 'input_layer'
+                        outputs = grad_model({input_name: img_tensor})
+                    else:
+                        raise
+                
+                # Handle output unpacking (can be list or tuple)
+                if isinstance(outputs, (list, tuple)):
+                    conv_outputs = outputs[0]
+                    predictions = outputs[1]
+                else:
+                    conv_outputs, predictions = outputs
+                
+                # Ensure predictions is a tensor
+                if isinstance(predictions, list):
+                    predictions = predictions[0] if len(predictions) == 1 else tf.stack(predictions)
+                
+                # Handle single-output models (sigmoid)
+                if predictions.shape[-1] == 1:
+                    class_output = predictions[:, 0] if class_idx == 1 else 1 - predictions[:, 0]
+                else:
+                    class_output = predictions[:, class_idx]
             
-            # Handle single-output models (sigmoid)
-            if predictions.shape[-1] == 1:
-                class_output = predictions[:, 0] if class_idx == 1 else 1 - predictions[:, 0]
-            else:
-                class_output = predictions[:, class_idx]
-        
-        # Get gradients
-        grads = tape.gradient(class_output, conv_outputs)
+            # Get gradients
+            grads = tape.gradient(class_output, conv_outputs)
+        except Exception as e:
+            print(f"Error during gradient computation: {e}")
+            print(f"Error type: {type(e).__name__}")
+            import traceback
+            traceback.print_exc()
+            raise RuntimeError(
+                f"Cannot compute gradients for GradCAM. "
+                f"Layer '{self.layer_name}' may not be properly connected in the model graph. "
+                f"Error: {str(e)}. "
+                f"Try using LIME or SHAP instead."
+            )
         
         # Compute weights
         pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))

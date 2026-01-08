@@ -28,7 +28,8 @@ class ModelLoader:
         }
     }
     
-    def __init__(self, models_dir='models'):
+    def __init__(self, models_dir: str = 'models'):
+        """Initialize ModelLoader with models directory path."""
         # Convert to absolute path if relative
         if not os.path.isabs(models_dir):
             # Get the directory of the current file (utils/)
@@ -41,9 +42,9 @@ class ModelLoader:
             self.models_dir = models_dir
         self.loaded_models = {}
     
-    def get_available_models(self, modality):
+    def get_available_models(self, modality: str) -> dict[str, dict]:
         """
-        Get available models for a specific modality by scanning the file system
+        Get available models for a specific modality by scanning the file system.
         
         Args:
             modality: 'audio' or 'image'
@@ -98,9 +99,9 @@ class ModelLoader:
         
         return available_models
     
-    def _format_model_name(self, model_key):
+    def _format_model_name(self, model_key: str) -> str:
         """
-        Format a model key into a readable name
+        Format a model key into a readable name.
         
         Args:
             model_key: Model filename without extension
@@ -112,9 +113,9 @@ class ModelLoader:
         name = model_key.replace('_', ' ').title()
         return name
     
-    def load_model(self, modality, model_key):
+    def load_model(self, modality: str, model_key: str):
         """
-        Load a model (or create dummy for testing)
+        Load a model from file system.
         
         Args:
             modality: 'audio' or 'image'
@@ -148,27 +149,21 @@ class ModelLoader:
         if os.path.exists(model_path):
             print(f"Loading model from {model_path}")
             
-            # Try multiple loading strategies for compatibility
+            # ALWAYS use tf.keras for consistency with GradCAM (which uses tf_keras)
+            # This prevents Keras 2/3 compatibility issues
+            import tensorflow as tf
             try:
-                # Strategy 1: Try with safe_mode=False for legacy models
-                import inspect
-                sig = inspect.signature(keras.models.load_model)
-                if 'safe_mode' in sig.parameters:
-                    model = keras.models.load_model(model_path, compile=False, safe_mode=False)
-                else:
-                    model = keras.models.load_model(model_path, compile=False)
-                print("Model loaded successfully")
-            except Exception as e1:
-                print(f"Standard loading failed: {e1}")
-                # Strategy 2: Try with tf.keras directly (better backward compatibility)
-                try:
-                    import tensorflow as tf
-                    model = tf.keras.models.load_model(model_path, compile=False)
-                    print("Model loaded with tf.keras")
-                except Exception as e2:
-                    print(f"tf.keras loading failed: {e2}")
-                    raise e1  # Raise original error
+                model = tf.keras.models.load_model(model_path, compile=False)
+                print("Model loaded with tf.keras")
+            except Exception as e:
+                print(f"Error loading model: {e}")
+                raise
             
+            # Ensure all layers are trainable for gradient computation (needed for GradCAM)
+            if hasattr(model, 'layers'):
+                for layer in model.layers:
+                    layer.trainable = True
+
             # Get input and output shapes
             print(f"Model input shape: {model.input_shape}")
             print(f"Model output shape: {model.output_shape}")

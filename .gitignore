@@ -77,3 +77,7 @@ Audio_real/
 models/image/*.h5
 models/image/*/
 models/
+# Audio models
+models/audio/*.h5
+models/audio/*/
+models/

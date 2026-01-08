@@ -12,14 +12,15 @@ from tensorflow.keras.preprocessing.image import load_img, img_to_array
 
 
 class AudioPreprocessor:
-    """Handles audio file preprocessing for model input"""
+    """Handles audio file preprocessing for model input."""
     
-    def __init__(self, target_size=(224, 224)):
+    def __init__(self, target_size: tuple[int, int] = (224, 224)):
         self.target_size = target_size
     
-    def create_spectrogram(self, audio_path, output_path='temp_spectrogram.png'):
+    def create_spectrogram(self, audio_path: str, 
+                          output_path: str = 'temp_spectrogram.png') -> Image.Image:
         """
-        Convert audio to mel-spectrogram image
+        Convert audio to mel-spectrogram image.
         
         Args:
             audio_path: Path to audio file
@@ -49,53 +50,42 @@ class AudioPreprocessor:
         
         return spec_image
     
-    def preprocess_for_model(self, spectrogram_image, target_size=(224, 224)):
+    def preprocess_for_model(self, spectrogram_image: Image.Image, 
+                            target_size: tuple[int, int] = (224, 224)) -> np.ndarray:
         """
-        Preprocess spectrogram image for model input
+        Preprocess spectrogram image for model input.
         
         Args:
             spectrogram_image: PIL Image of spectrogram
             target_size: Target size for model
             
         Returns:
-            Preprocessed numpy array ready for model
+            Preprocessed numpy array ready for model (shape: 1, H, W, 3)
         """
-        # Resize
-        img = spectrogram_image.resize(target_size)
-        
-        # Convert to RGB if needed
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
-        
-        # Convert to numpy array
-        img_array = np.array(img)
-        
-        # Normalize to [0, 1]
-        img_array = img_array.astype('float32') / 255.0
-        
-        # Add batch dimension
-        img_array = np.expand_dims(img_array, axis=0)
-        
-        return img_array
+        return ImagePreprocessor._preprocess_image(spectrogram_image, target_size)
 
 
 class ImagePreprocessor:
-    """Handles image preprocessing for model input"""
+    """Handles image preprocessing for model input."""
     
-    def __init__(self):
-        pass
-    
-    def preprocess_for_model(self, image, target_size=(224, 224)):
+    def preprocess_for_model(self, image: Image.Image, 
+                           target_size: tuple[int, int] = (224, 224)) -> np.ndarray:
         """
-        Preprocess image for model input
+        Preprocess image for model input.
         
         Args:
             image: PIL Image
             target_size: Target size for model
             
         Returns:
-            Preprocessed numpy array ready for model
+            Preprocessed numpy array ready for model (shape: 1, H, W, 3)
         """
+        return self._preprocess_image(image, target_size)
+    
+    @staticmethod
+    def _preprocess_image(image: Image.Image, 
+                         target_size: tuple[int, int]) -> np.ndarray:
+        """Common preprocessing logic for images."""
         # Resize
         img = image.resize(target_size)
         
@@ -103,13 +93,8 @@ class ImagePreprocessor:
         if img.mode != 'RGB':
             img = img.convert('RGB')
         
-        # Convert to numpy array
-        img_array = np.array(img)
-        
-        # Normalize to [0, 1]
-        img_array = img_array.astype('float32') / 255.0
+        # Convert to numpy array and normalize to [0, 1]
+        img_array = np.array(img).astype('float32') / 255.0
         
         # Add batch dimension
-        img_array = np.expand_dims(img_array, axis=0)
-        
-        return img_array
+        return np.expand_dims(img_array, axis=0)
