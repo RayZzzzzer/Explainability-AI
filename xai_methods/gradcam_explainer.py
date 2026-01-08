@@ -30,9 +30,31 @@ class GradCAMExplainer:
         
     def _find_last_conv_layer(self):
         """Find the last convolutional layer in the model"""
+        # Try to find convolutional layers by class type
+        conv_layers = []
+        
+        for layer in self.model.layers:
+            # Check by class name (more reliable than layer name)
+            layer_class = layer.__class__.__name__
+            if 'Conv' in layer_class:
+                conv_layers.append(layer.name)
+                print(f"Found conv layer: {layer.name} (type: {layer_class})")
+        
+        if conv_layers:
+            print(f"Using last conv layer: {conv_layers[-1]}")
+            return conv_layers[-1]
+        
+        # Fallback: check by name
         for layer in reversed(self.model.layers):
             if 'conv' in layer.name.lower():
+                print(f"Using conv layer by name: {layer.name}")
                 return layer.name
+        
+        # Print all layer names for debugging
+        print("Available layers:")
+        for layer in self.model.layers:
+            print(f"  - {layer.name} (type: {layer.__class__.__name__})")
+        
         raise ValueError("No convolutional layer found in model")
     
     def explain(self, image, class_idx=None, preprocess_fn=None):
@@ -77,16 +99,87 @@ class GradCAMExplainer:
             # Fallback: try to find any conv layer
             self.layer_name = self._find_last_conv_layer()
             last_conv_layer = self.model.get_layer(self.layer_name)
+        
+        # IMPORTANT: Call model first to build the graph if needed
+        try:
+            # Test if model has been built
+            _ = self.model.output
+            print("Model already built")
+        except (AttributeError, ValueError) as e:
+            print(f"Model not built yet ({e}), calling it to build graph...")
+            _ = self.model(img_input)
+            print("Model built successfully")
+        
+        # Build a model that returns both the conv layer output and final predictions
+        try:
+            print(f"Attempting to create grad_model with inputs={self.model.inputs}, conv_layer={self.layer_name}")
+            grad_model = keras.models.Model(
+                inputs=self.model.inputs,
+                outputs=[last_conv_layer.output, self.model.output]
+            )
+            print("Grad model created successfully!")
+        except (AttributeError, ValueError, RuntimeError) as e:
+            print(f"Error creating grad model with model.inputs/output: {e}")
+            print(f"Model type: {type(self.model)}")
+            print(f"Model class: {self.model.__class__.__name__}")
             
-        grad_model = keras.models.Model(
-            [self.model.inputs],
-            [last_conv_layer.output, self.model.output]
-        )
+            # Try building a new functional model by calling layers directly
+            try:
+                print("Trying functional API approach...")
+                # Get input tensor
+                input_tensor = keras.Input(shape=self.model.input_shape[1:])
+                
+                # Pass through model to get outputs
+                x = input_tensor
+                for layer in self.model.layers:
+                    x = layer(x)
+                    if layer.name == self.layer_name:
+                        conv_output = x
+                
+                # Create new functional model
+                grad_model = keras.models.Model(
+                    inputs=input_tensor,
+                    outputs=[conv_output, x]
+                )
+                print("Functional model created successfully!")
+            except Exception as e2:
+                print(f"Functional approach also failed: {e2}")
+                
+                # Last resort: use model directly with eager execution
+                try:
+                    print("Trying direct eager execution approach...")
+                    grad_model = None  # We'll compute gradients differently
+                except Exception as e3:
+                    print(f"All approaches failed: {e3}")
+                    raise RuntimeError(f"Could not create gradient model. Try using a different model or XAI method.")
         
         # Compute gradients
-        with tf.GradientTape() as tape:
-            conv_outputs, predictions = grad_model(img_input)
-            class_output = predictions[:, class_idx]
+        if grad_model is not None:
+            with tf.GradientTape() as tape:
+                conv_outputs, predictions = grad_model(img_input)
+                # Handle single-output models (sigmoid)
+                if predictions.shape[-1] == 1:
+                    class_output = predictions[:, 0] if class_idx == 1 else 1 - predictions[:, 0]
+                else:
+                    class_output = predictions[:, class_idx]
+        else:
+            # Direct computation without intermediate model
+            with tf.GradientTape() as tape:
+                tape.watch(img_input)
+                # Forward pass through layers
+                x = img_input
+                for layer in self.model.layers:
+                    x = layer(x)
+                    if layer.name == self.layer_name:
+                        conv_outputs = x
+                        tape.watch(conv_outputs)
+                predictions = x
+                
+                # Handle single-output models (sigmoid)
+                if predictions.shape[-1] == 1:
+                    class_output = predictions[:, 0] if class_idx == 1 else 1 - predictions[:, 0]
+                else:
+                    class_output = predictions[:, class_idx]
         
         # Get gradients
         grads = tape.gradient(class_output, conv_outputs)

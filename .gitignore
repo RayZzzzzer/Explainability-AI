@@ -73,3 +73,7 @@ explanations/
 Audio_fake/
 Audio_real/
 
+# Image models
+models/image/*.h5
+models/image/*/
+models/

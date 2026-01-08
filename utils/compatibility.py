@@ -14,9 +14,9 @@ class XAICompatibilityChecker:
             'shap': True
         },
         'image': {
-            'lime': True,
+            'lime': False,
             'gradcam': True,
-            'shap': True
+            'shap': False
         }
     }
     

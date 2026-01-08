@@ -175,9 +175,20 @@ def show_classification_page():
                     predictions = model.predict(preprocessed)
                     st.session_state.predictions = predictions
                     
-                    # Display results
-                    predicted_class = np.argmax(predictions[0])
+                    # Handle different output formats
                     class_names = model_info['classes']
+                    
+                    # Check if model outputs single value (sigmoid) or two values (softmax)
+                    if predictions[0].shape[0] == 1:
+                        # Single output (sigmoid): convert to two-class probabilities
+                        prob_class1 = float(predictions[0][0])
+                        prob_class0 = 1.0 - prob_class1
+                        predictions_2class = np.array([[prob_class0, prob_class1]])
+                        predicted_class = 1 if prob_class1 > 0.5 else 0
+                    else:
+                        # Two outputs (softmax): use as-is
+                        predictions_2class = predictions
+                        predicted_class = np.argmax(predictions[0])
                     
                     st.success("✅ Classification Complete!")
                     
@@ -187,7 +198,7 @@ def show_classification_page():
                         st.metric(
                             "Predicted Class",
                             class_names[predicted_class],
-                            f"{predictions[0][predicted_class]*100:.2f}% confidence"
+                            f"{predictions_2class[0][predicted_class]*100:.2f}% confidence"                             
                         )
                     
                     with col2:
@@ -195,8 +206,8 @@ def show_classification_page():
                         st.markdown("**Class Probabilities:**")
                         for i, class_name in enumerate(class_names):
                             st.progress(
-                                float(predictions[0][i]),
-                                text=f"{class_name}: {predictions[0][i]*100:.1f}%"
+                                float(predictions_2class[0][i]),
+                                text=f"{class_name}: {predictions_2class[0][i]*100:.1f}%"
                             )
                     
                     # Show preprocessed input
@@ -258,8 +269,26 @@ def show_classification_page():
                         elif selected_xai == 'gradcam':
                             explainer = GradCAMExplainer(model)
                             predicted_class = np.argmax(st.session_state.predictions[0])
+                            
+                            # Preprocess input for Grad-CAM (handles both audio spectrograms and images)
+                            from PIL import Image
+                            if isinstance(st.session_state.preprocessed_input, Image.Image):
+                                # Both audio spectrograms and images are PIL Images
+                                if st.session_state.modality == 'image':
+                                    preprocessor = ImagePreprocessor()
+                                else:  # audio
+                                    preprocessor = AudioPreprocessor()
+                                
+                                # Convert PIL image to array and preprocess
+                                img_for_gradcam = preprocessor.preprocess_for_model(st.session_state.preprocessed_input)
+                                # Remove batch dimension for Grad-CAM (it will add it back)
+                                img_for_gradcam = img_for_gradcam[0]
+                            else:
+                                # Already preprocessed array
+                                img_for_gradcam = st.session_state.preprocessed_input
+                            
                             result = explainer.explain(
-                                st.session_state.preprocessed_input,
+                                img_for_gradcam,
                                 class_idx=predicted_class
                             )
                             fig = explainer.visualize(
