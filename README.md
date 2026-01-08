@@ -67,8 +67,7 @@ Explainability-AI/
 │
 └── docs/                       # Documentation
     ├── TECHNICAL_REPORT.md     # Technical report
-    ├── AI_USAGE_STATEMENT.md   # Generative AI usage declaration
-    └── QUICK_START.md          # Quick start guide
+    └── AI_USAGE_STATEMENT.md   # Generative AI usage declaration
 ```
 
 ## 🚀 Installation & Setup
@@ -352,5 +351,5 @@ This project integrates work from:
 
 Please respect the licenses of the original repositories.
 
-**Last Updated**: January 2025  
+**Last Updated**: January 2026
 **Version**: 1.0.0

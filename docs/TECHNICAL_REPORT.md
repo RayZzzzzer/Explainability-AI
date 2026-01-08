@@ -1,14 +1,14 @@
 # Technical Report: Unified XAI Platform
 
 **Project**: Multi-Modal Explainable AI Platform  
-**Date**: December 2025  
-**Team**: [Your TD Group]
+**Date**: January 2026  
+**Team**: DIA5
 
 ---
 
 ## Executive Summary
 
-This technical report documents the design, implementation, and integration of a unified Explainable AI platform that combines audio deepfake detection and medical image classification capabilities. The platform provides a seamless interface for multi-modal classification with integrated explainability methods (LIME, Grad-CAM, SHAP).
+This technical report documents the design, implementation, and integration of a unified Explainable AI platform that combines audio deepfake detection and medical image classification capabilities. The platform provides a seamless interface for multi-modal classification with integrated explainability methods (LIME, Grad-CAM, SHAP, Saliency Maps).
 
 ---
 
@@ -87,6 +87,7 @@ The platform follows a **modular, layered architecture** with clear separation o
 │  - Audio         │  │  - LIME         │
 │  - Image         │  │  - Grad-CAM     │
 └────────┬─────────┘  │  - SHAP         │
+         │            │  - Saliency     │
          │            └──────┬──────────┘
          │                   │
 ┌────────▼───────────────────▼──────────┐
@@ -147,6 +148,13 @@ The platform follows a **modular, layered architecture** with clear separation o
   - Background dataset initialization
   - Pixel-level attribution
   - Multiple visualization modes
+
+**4. saliency_explainer.py**
+- `SaliencyExplainer`: Saliency Maps implementation
+  - Vanilla gradient computation
+  - Pixel-level sensitivity visualization
+  - Support for binary and multi-class models
+  - Fast and model-agnostic
 
 #### C. User Interface (`app.py`)
 
@@ -219,8 +227,7 @@ The platform implements an intelligent compatibility matrix:
 |------------|---------------------|---------------|--------------|
 | LIME       | ✅                  | ✅            | None (model-agnostic) |
 | Grad-CAM   | ✅                  | ✅            | Convolutional layers |
-| SHAP       | ✅                  | ✅            | None (model-agnostic) |
-
+| SHAP       | ✅                  | ✅            | None (model-agnostic) || Saliency Maps | ✅               | ✅            | Differentiable model |
 **Design Rationale**:
 - All methods support both modalities since spectrograms are images
 - Grad-CAM requires CNN architecture (verified at runtime)
@@ -325,16 +332,39 @@ The platform implements an intelligent compatibility matrix:
 
 **Best For**: Comprehensive, theoretically justified explanations
 
-### 6.4 Comparison Table
+### 6.4 Saliency Maps (Vanilla Gradients)
 
-| Aspect | LIME | Grad-CAM | SHAP |
-|--------|------|----------|------|
-| **Speed** | Slow | Fast | Medium |
-| **Model-Agnostic** | ✅ | ❌ (needs CNN) | ✅ |
-| **Deterministic** | ❌ | ✅ | ✅ |
-| **Granularity** | Superpixels | Spatial regions | Pixels |
-| **Theoretical Foundation** | Linear approximation | Gradient-based | Game theory |
-| **Interpretability** | High | Very High | Medium |
+**Mechanism**:
+1. Compute gradients of model output w.r.t. input
+2. Calculate gradient magnitude for each pixel
+3. Visualize as heatmap showing sensitivity
+4. Overlay on original input
+
+**Strengths**:
+- Extremely fast (single backward pass)
+- Simple and interpretable
+- Works with any differentiable model
+- Pixel-level granularity
+- No hyperparameters or background data needed
+
+**Weaknesses**:
+- Can be noisy without smoothing
+- May highlight edges rather than objects
+- Less class-discriminative than Grad-CAM
+- Raw gradients can be difficult to interpret
+
+**Best For**: Quick, pixel-level sensitivity analysis and feature importance
+
+### 6.5 Comparison Table
+
+| Aspect | LIME | Grad-CAM | SHAP | Saliency Maps |
+|--------|------|----------|------|---------------|
+| **Speed** | Slow | Fast | Medium | Very Fast |
+| **Model-Agnostic** | ✅ | ❌ (needs CNN) | ✅ | ✅ (needs gradients) |
+| **Deterministic** | ❌ | ✅ | ✅ | ✅ |
+| **Granularity** | Superpixels | Spatial regions | Pixels | Pixels |
+| **Theoretical Foundation** | Linear approximation | Gradient-based | Game theory | Gradient-based |
+| **Interpretability** | High | Very High | Medium | Medium-High |
 
 ---
 
@@ -386,9 +416,13 @@ The platform implements an intelligent compatibility matrix:
 1. Automatic modality detection
 2. Dynamic XAI compatibility filtering
 3. Multi-XAI comparison view
-4. Session state management
+4. Session state management with smart reset detection
 5. Comprehensive error handling
 6. Dummy models for testing
+7. Saliency Maps for fast pixel-level attribution
+8. Automatic Keras version detection (tf_keras vs keras 3.x)
+9. Nested model support for transfer learning architectures
+10. Persistent classification results during XAI generation
 
 ---
 
@@ -433,6 +467,26 @@ The platform implements an intelligent compatibility matrix:
 - Used `st.session_state` for persistence
 - Cached expensive operations
 - Structured workflow to minimize recomputation
+- Implemented file/model change detection to reset predictions
+- Persistent display of classification results
+
+### Challenge 6: Keras Version Compatibility
+**Problem**: Models saved with different Keras versions (tf_keras 2.x vs keras 3.x) causing GradCAM failures
+
+**Solution**:
+- Implemented automatic Keras version detection by inspecting model module
+- Dynamic import of correct Keras module for gradient computation
+- Nested model detection for transfer learning architectures
+- Dictionary input format fallback for models with named inputs
+
+### Challenge 7: Binary vs Multi-class Output Handling
+**Problem**: Some models use single sigmoid output (binary), others use softmax (multi-class)
+
+**Solution**:
+- Output shape detection in XAI methods
+- Conditional logic for binary (shape: `(None, 1)`) vs multi-class
+- Proper gradient computation for both output types
+- Consistent class index handling across methods
 
 ---
 
@@ -471,14 +525,17 @@ The platform implements an intelligent compatibility matrix:
 ### Short-term Improvements
 1. **Additional Models**: Add more architectures (EfficientNet, Vision Transformer)
 2. **Batch Processing**: Support multiple files at once
-3. **Export Functionality**: Save explanations as reports
-4. **Performance Metrics**: Show model accuracy, F1 score, etc.
+3. **Export Functionality**: Save explanations as reports (PDF, HTML)
+4. **Performance Metrics**: Show model accuracy, F1 score, confusion matrix
+5. **Smooth/Integrated Gradients**: Enhance saliency with smoothing techniques
 
 ### Medium-term Enhancements
 1. **Additional Modalities**: Add video, text, or tabular data support
-2. **More XAI Methods**: Integrated Gradients, Attention visualization
+2. **More XAI Methods**: Integrated Gradients with smoothing, Attention visualization
 3. **Custom Model Upload**: Allow users to upload their own models
 4. **Dataset Management**: Built-in dataset loading and splitting
+5. **Interactive Zoom**: Add Plotly or similar for interactive visualizations
+6. **Model Comparison**: Side-by-side comparison of different models
 
 ### Long-term Vision
 1. **Cloud Deployment**: Host as web service
@@ -536,6 +593,6 @@ The unified platform demonstrates how thoughtful architecture and careful integr
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: December 2025  
-**Authors**: [Your Team Names]
+**Document Version**: 1.1  
+**Last Updated**: January 2026  
+**Authors**: DIA5 Team

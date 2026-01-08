@@ -81,3 +81,4 @@ models/
 models/audio/*.h5
 models/audio/*/
 models/
+*.h5
