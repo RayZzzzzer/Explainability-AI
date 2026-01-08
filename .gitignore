@@ -31,7 +31,6 @@ env/
 
 # Jupyter Notebook
 .ipynb_checkpoints
-*.ipynb
 
 # IDEs
 .vscode/
@@ -81,4 +80,3 @@ models/
 models/audio/*.h5
 models/audio/*/
 models/
-*.h5
