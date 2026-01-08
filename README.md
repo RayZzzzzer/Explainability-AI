@@ -33,8 +33,6 @@ Explainability-AI/
 ├── app.py                      # Main Streamlit application
 ├── requirements.txt            # Python dependencies
 ├── README.md                   # This file
-├── setup_check.py              # Setup verification script
-├── PROJECT_SUMMARY.md          # Project summary
 │
 ├── utils/                      # Utility modules
 │   ├── __init__.py
@@ -51,13 +49,21 @@ Explainability-AI/
 ├── models/                     # Trained models
 │   ├── README.md               # Model documentation
 │   ├── audio/                  # Audio models (auto-discovered)
+│   │   ├── my_vgg16.h5         # VGG16 model (.h5 format)
 │   │   └── mobilenet/          # MobileNet SavedModel (tf_keras)
 │   └── image/                  # Image models (auto-discovered)
+│       ├── custom_cnn_best.h5
+│       └── transfer_learning_best.h5
 │
 ├── data/                       # Data directory
 │   ├── README.md
 │   ├── audio_uploads/          # Uploaded audio files
 │   └── image_uploads/          # Uploaded images
+│
+├── utils notebooks/            # Development notebooks
+│   ├── convert_h5.ipynb        # Model conversion utilities
+│   ├── convert_to_spectro.py   # Audio to spectrogram conversion
+│   └── TrainModels.ipynb       # Model training notebooks
 │
 └── docs/                       # Documentation
     ├── TECHNICAL_REPORT.md     # Technical report
@@ -134,7 +140,7 @@ The application will open in your default web browser at `http://localhost:8501`
 4. **Generate XAI Explanations**
    - Select an XAI method (automatically filtered by compatibility)
    - Click "Generate Explanation" to visualize model decisions
-   - Supported methods: LIME, Grad-CAM, SHAP
+   - Supported methods: LIME, Grad-CAM, SHAP, Saliency Maps
 
 5. **Compare Explanations**
    - Navigate to "XAI Comparison" tab
@@ -163,6 +169,7 @@ The application will open in your default web browser at `http://localhost:8501`
 | **LIME** | ✅ | ✅ | Local Interpretable Model-agnostic Explanations - highlights influential regions |
 | **Grad-CAM** | ✅ | ✅ | Gradient-weighted Class Activation Mapping - visualizes model attention |
 | **SHAP** | ✅ | ✅ | SHapley Additive exPlanations - game-theory based attribution |
+| **Saliency Maps** | ✅ | ✅ | Vanilla Gradient Visualization - pixel-level sensitivity analysis |
 
 ## 🧪 Demo Instructions
 
@@ -286,12 +293,21 @@ All AI-generated code was:
 - Generates heatmap highlighting important regions
 - Requires convolutional layers
 - Uses tf_keras for compatibility with SavedModel format
+- **Automatic keras version detection** - adapts to model's keras version
+- **Nested model support** - handles transfer learning models (MobileNet, VGG16, etc.)
 
 **SHAP (SHapley Additive exPlanations)**:
 - Tries GradientExplainer and DeepExplainer first
 - Falls back to **Integrated Gradients** for tf_keras models
 - Provides pixel-level attributions
 - Fast and reliable gradient-based explanations
+
+**Saliency Maps (Vanilla Gradients)**:
+- Computes gradients of output w.r.t. input
+- Shows pixel-level sensitivity/importance
+- Simple and fast computation
+- Works with any differentiable model
+- Provides fine-grained feature attribution
 
 ### Key Technical Components
 
@@ -321,6 +337,12 @@ All AI-generated code was:
 
 **Issue**: SHAP installation fails
 - **Solution**: Try `pip install shap --no-cache-dir` or use a different Python version (3.8-3.10 recommended)
+
+**Issue**: GradCAM fails with "Cannot create gradient model" error
+- **Solution**: This can happen with certain model architectures. The system will automatically try alternative approaches. If it persists, use LIME or SHAP instead
+
+**Issue**: Streamlit warnings about `use_container_width`
+- **Solution**: These are deprecation warnings and don't affect functionality. Update to `width='stretch'` if desired
 
 ## 📄 License
 

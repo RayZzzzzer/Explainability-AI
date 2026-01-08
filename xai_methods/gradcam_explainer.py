@@ -168,8 +168,6 @@ class GradCAMExplainer:
         
         if last_conv_layer is None:
             raise ValueError(f"Could not find layer '{self.layer_name}' in model or nested models")
-            self.layer_name = self._find_last_conv_layer()
-            last_conv_layer = self.model.get_layer(self.layer_name)
         
         # Call model first to build the graph if needed
         try:

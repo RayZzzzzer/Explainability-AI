@@ -11,12 +11,14 @@ class XAICompatibilityChecker:
         'audio': {
             'lime': True,
             'gradcam': True,
-            'shap': True
+            'shap': True,
+            'saliency': True
         },
         'image': {
             'lime': True,
             'gradcam': False,
-            'shap': True
+            'shap': True,
+            'saliency': True
         }
     }
     

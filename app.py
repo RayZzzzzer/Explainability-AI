@@ -21,6 +21,7 @@ from utils.compatibility import XAICompatibilityChecker
 from xai_methods.lime_explainer import LIMEExplainer
 from xai_methods.gradcam_explainer import GradCAMExplainer
 from xai_methods.shap_explainer import SHAPExplainer
+from xai_methods.saliency_explainer import SaliencyExplainer
 
 # Page configuration
 st.set_page_config(
@@ -278,7 +279,8 @@ def show_classification_page():
             xai_display_names = {
                 'lime': 'LIME - Local Interpretable Model-agnostic Explanations',
                 'gradcam': 'Grad-CAM - Gradient-weighted Class Activation Mapping',
-                'shap': 'SHAP - SHapley Additive exPlanations'
+                'shap': 'SHAP - SHapley Additive exPlanations',
+                'saliency': 'Saliency Maps - Vanilla Gradient Visualization'
             }
             
             selected_xai = st.selectbox(
@@ -364,6 +366,36 @@ def show_classification_page():
                                 target_size=target_size
                             )
                             fig = explainer.visualize(result, class_names)
+                            
+                        elif selected_xai == 'saliency':
+                            explainer = SaliencyExplainer(model)
+                            predicted_class = st.session_state.predicted_class
+                            
+                            # Preprocess input for saliency
+                            from PIL import Image
+                            if isinstance(st.session_state.preprocessed_input, Image.Image):
+                                if st.session_state.modality == 'image':
+                                    preprocessor = ImagePreprocessor()
+                                else:  # audio
+                                    preprocessor = AudioPreprocessor()
+                                
+                                img_for_saliency = preprocessor.preprocess_for_model(st.session_state.preprocessed_input)
+                            else:
+                                # Already preprocessed array
+                                img_for_saliency = st.session_state.preprocessed_input
+                                if len(img_for_saliency.shape) == 3:
+                                    img_for_saliency = np.expand_dims(img_for_saliency, axis=0)
+                            
+                            result = explainer.explain(
+                                img_for_saliency,
+                                class_idx=predicted_class
+                            )
+                            fig = explainer.visualize(
+                                img_for_saliency,
+                                result,
+                                class_idx=predicted_class,
+                                modality=st.session_state.modality
+                            )
                         
                         # Store result
                         st.session_state.xai_results[selected_xai] = {
@@ -387,6 +419,9 @@ def show_classification_page():
                         
                         - **SHAP**: Provides pixel-level attribution based on game theory (Shapley values).
                         Offers comprehensive and theoretically grounded explanations.
+                        
+                        - **Saliency Maps**: Shows pixel-level gradient magnitudes indicating sensitivity.
+                        Simple and fast method for identifying important features.
                         """)
                         
                     except Exception as e:
