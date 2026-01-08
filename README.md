@@ -47,7 +47,6 @@ Explainability-AI/
 │   └── shap_explainer.py       # SHAP implementation
 │
 ├── models/                     # Trained models
-│   ├── README.md               # Model documentation
 │   ├── audio/                  # Audio models (auto-discovered)
 │   │   ├── my_vgg16.h5         # VGG16 model (.h5 format)
 │   │   └── mobilenet/          # MobileNet SavedModel (tf_keras)
